@@ -61,10 +61,9 @@ class CSVLoaderApp:
                     for val in row[1:]: 
                         if val: self.volume_values.append(float(val)) 
 
-        self.interpolate_values(new_timestepsize=1) 
-        if self.t_clip != self.t_rr: self.close_volume_values()
-          
-        self.volume_shift()
+        self.interpolate_values(target_time_step=1) 
+        #if self.t_clip != self.t_rr: self.close_volume_values()
+        #self.volume_shift()
 
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
@@ -93,32 +92,15 @@ class CSVLoaderApp:
         temp = self.volume_values[max_index:] + self.volume_values[:max_index]
         self.volume_values = temp
 
-    def interpolate_values(self, new_timestepsize): # n_points is the amount of values after interpolation
-        """Interpolate volume data for a higher accuracy derivation"""
-        # update timestepsize!!!!
-
-
-    def interpolate_volume_time_curve(original_time, original_volume, target_time_step):
-        """
-        Interpolate volume-time curve to a specified time step.
-
-        Parameters:
-        - original_time: Original time values.
-        - original_volume: Original volume values.
-        - target_time_step: Desired time step for interpolation.
-
-        Returns:
-        - interpolated_time: Time values with the desired time step.
-        - interpolated_volume: Interpolated volume values.
-        """
-
+    def interpolate_values(self, target_time_step):
+        """Interpolate volume-time curve to a specified time step"""
         # Create a new time array with the desired time step
-        interpolated_time = np.arange(original_time[0], original_time[-1], target_time_step)
-
+        interpolated_time = np.arange(self.time_values[0], self.time_values[-1], target_time_step)
         # Interpolate volume values based on the new time array
-        interpolated_volume = np.interp(interpolated_time, original_time, original_volume)
-
-        return interpolated_time, interpolated_volume
+        interpolated_volume = np.interp(interpolated_time, self.time_values, self.volume_values)
+        self.time_values = interpolated_time.tolist()
+        self.volume_values = interpolated_volume.tolist()
+        self.timestep_size = target_time_step
 
 
     def compute_vol_derivation(self, x, y):

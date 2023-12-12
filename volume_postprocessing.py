@@ -107,6 +107,7 @@ class CSVLoaderApp:
         print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
         print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
         print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
+        self.compute_exports()
         
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
@@ -199,6 +200,22 @@ class CSVLoaderApp:
             if i == 0: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[-1]) / self.timestep_size)
             else: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
         # !!! zweite ableitung
+
+    def compute_exports(self):
+        """Compute exports"""
+        print(f"Computing exports")
+        self.EDV = max(self.volume_values)
+        print(f"EDV: {self.EDV} ml")
+        self.ESV = min(self.volume_values)
+        print(f"ESV: {self.ESV} ml")
+        self.PER = max(self.d_vol_dt)
+        print(f"PER: {self.PER} l/s")
+        self.PFR = min(self.d_vol_dt)
+        print(f"PFR: {self.PFR} l/s")
+        self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
+        print(f"time_to_PER: {self.time_to_PER} ms")
+        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))
+        print(f"time_to_PFR: {self.time_to_PFR} ms")        
 
     def plot_data(self):
         """Plot time and volume"""

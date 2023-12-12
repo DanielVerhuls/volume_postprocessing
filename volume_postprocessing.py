@@ -20,7 +20,6 @@ class CSVLoaderApp:
         self.time_values = []
         self.volume_values = []
         self.d_vol_dt = []
-        self.d_d_vol_dt_dt = []
         self.timestep_size = 1 # 1 ms
         # Export values
         self.EDV = 0
@@ -194,12 +193,11 @@ class CSVLoaderApp:
         return smoothed_curve
 
     def compute_vol_derivations(self):
-        """Compute derivation"""
-        self.d_vol_dt = []
+        """Compute temporal derivation of the volume curve"""
+        self.d_vol_dt = [] 
         for i in range(len(self.volume_values)):
             if i == 0: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[-1]) / self.timestep_size)
             else: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
-        # !!! zweite ableitung
 
     def compute_exports(self):
         """Compute exports"""
@@ -208,9 +206,9 @@ class CSVLoaderApp:
         print(f"EDV: {self.EDV} ml")
         self.ESV = min(self.volume_values)
         print(f"ESV: {self.ESV} ml")
-        self.PER = max(self.d_vol_dt)
+        self.PER = min(self.d_vol_dt)
         print(f"PER: {self.PER} l/s")
-        self.PFR = min(self.d_vol_dt)
+        self.PFR = max(self.d_vol_dt)
         print(f"PFR: {self.PFR} l/s")
         self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
         print(f"time_to_PER: {self.time_to_PER} ms")
@@ -232,6 +230,10 @@ class CSVLoaderApp:
             ## Plot derivation
             self.axis2.clear() # Clear previous plot
             self.axis2.plot(self.time_values, self.d_vol_dt, label='Volume derivation vs Time')
+            # Mark maximum and minimum values with points
+            self.axis2.scatter(self.time_to_PFR, self.PFR, color='red', label='PFR', marker='x')
+            self.axis2.scatter(self.time_to_PER, self.PER, color='blue', label='PER', marker='x')
+
             # Set plot labels and legend
             self.axis2.set_xlabel('Time (ms)')
             self.axis2.set_ylabel('Volume change (ml/s)')

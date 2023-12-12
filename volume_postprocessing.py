@@ -92,15 +92,21 @@ class CSVLoaderApp:
         # Create a mask to specify different regions
         mask = np.zeros((3, len(self.volume_values)))  # Two regions
         mask[0, 0:150] = 1  # Apply filter to the first region
-        mask[1, 150:550] = 1    # Apply filter to the second region
-        mask[1, 550:] = 1    # Apply filter to the third region
+        mask[1, 150:500] = 1    # Apply filter to the second region
+        mask[1, 500:] = 1    # Apply filter to the third region
 
         # Define window sizes and orders for each region
-        window_sizes = [11, 31, 11]
-        orders = [5, 3, 5]
+        window_sizes = [3, 31, 3]
+        orders = [2, 4, 2]
 
         self.d_vol_dt = self.apply_variable_strength_savitzky_golay(self.d_vol_dt, window_sizes, orders, mask)
-        print(f"self.d_vol_dt: {self.d_vol_dt}")
+        print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
+        print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
+        print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
+        #self.savitzky_golay_filter(case="d_vol_dt")
+        print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
+        print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
+        print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
         
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
@@ -150,16 +156,9 @@ class CSVLoaderApp:
         if case == "vol":
             smoothed_curve = savgol_filter(self.volume_values, window_length = 5, polyorder = 4)
             self.volume_values = smoothed_curve
-            print(f"Volume value at index 300: {self.volume_values[300]}")
-            print(f"Minimum volume: {min(self.volume_values)}")
-            print(f"Maximum volume: {max(self.volume_values)}")
-        elif case == "dvoldt":
-            smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 10, polyorder = 5)
-            smoothed_curve_2 = savgol_filter(smoothed_curve, window_length = 20, polyorder = 5)
-            self.d_vol_dt = smoothed_curve_2
-            print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
-            print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
-            print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
+        elif case == "d_vol_dt":
+            smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 10, polyorder = 4)
+            self.d_vol_dt = smoothed_curve
         else:
             print(f"Wrong case for filter.")
             return False

@@ -7,11 +7,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import math
 import numpy as np
 from scipy.signal import savgol_filter
+from scipy.interpolate import CubicSpline
 
 class CSVLoaderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("CSV File Loader")
+        self.root.title("Volume post-processing")
 
         self.data = None  # 2D array to store CSV data
         self.t_rr = 0
@@ -20,7 +21,7 @@ class CSVLoaderApp:
         self.volume_values = []
         self.d_vol_dt = []
         self.d_d_vol_dt_dt = []
-        self.timestep_size = 1
+        self.timestep_size = 1 # 1 ms
 
         # Create UI components
         self.btn_load = tk.Button(root, text="Load CSV", command=self.load_csv)
@@ -37,7 +38,6 @@ class CSVLoaderApp:
         self.canvas2 = FigureCanvasTkAgg(self.figure2, master=root)
         self.canvas_widget2 = self.canvas2.get_tk_widget()
         self.canvas_widget2.pack()
-
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -77,28 +77,34 @@ class CSVLoaderApp:
         print(f"Länge volumes:{len(self.volume_values)}| Länge times:{len(self.time_values)}| Max times:{max(self.time_values)}| timestepsize:{self.timestep_size}")
         self.volume_shift()
         print(f"Länge volumes:{len(self.volume_values)}| Länge times:{len(self.time_values)}| Max times:{max(self.time_values)}| timestepsize:{self.timestep_size}")
-        #self.savitzky_golay_filter()
+        self.savitzky_golay_filter(case="vol")
         print(f"Länge volumes:{len(self.volume_values)}| Länge times:{len(self.time_values)}| Max times:{max(self.time_values)}| timestepsize:{self.timestep_size}")
         self.compute_vol_derivations()
         print(f"Länge volumes:{len(self.volume_values)}| Länge times:{len(self.time_values)}| Max times:{max(self.time_values)}| timestepsize:{self.timestep_size}")
+        self.savitzky_golay_filter(case="dvoldt")
+        print(f"Länge volumes:{len(self.volume_values)}| Länge times:{len(self.time_values)}| Max times:{max(self.time_values)}| timestepsize:{self.timestep_size}")
         
-
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
         # Check if the lengths of time_data and volume_data are the same
         if len(self.time_values) != len(self.volume_values):
             raise ValueError("Lengths of time_data and volume_data must be the same.")
-        # Calculate linear slope
-        slope = (self.volume_values[0] - self.volume_values[-1]) / (self.time_values[0] + self.t_rr - self.time_values[-1])
         # Calculate the amount of missing values
         n_missing = math.floor((self.t_rr - self.t_clip) / self.timestep_size)
-        # Fill in missing values for the next cycle
-        for i in range(n_missing): # !!! vielleicht doppelt value beim shift
-            next_time = self.time_values[-1] + self.timestep_size
-            next_volume = self.volume_values[-1] + slope * self.timestep_size
-            self.time_values.append(next_time)
-            self.volume_values.append(next_volume)
-
+        # Convert arrays for Numpy
+        times = np.array(self.time_values)
+        volumes = np.array(self.volume_values)
+        # Append last element as initial element
+        times = np.append(times, self.t_rr)
+        volumes = np.append(volumes, volumes[0])
+        # Compute new time values after spline interpolation
+        plot_time_values = np.linspace(min(times), max(times), num=round(self.t_rr)) 
+        self.time_values = plot_time_values.tolist()
+        # Compute spline of the volumes values
+        spline = CubicSpline(times, volumes, bc_type='periodic')
+        spline_values = spline(plot_time_values)
+        self.volume_values = spline_values.tolist()
+        
     def volume_shift(self, ):
         """Shift volumes such that the initial value begins with EDV"""
         if not self.volume_values:
@@ -121,22 +127,24 @@ class CSVLoaderApp:
         self.timestep_size = target_time_step
         self.t_clip = max(self.time_values)
 
-    def savitzky_golay_filter(self):
+    def savitzky_golay_filter(self, case):
         """Apply Savitzky-Golay filter to smooth volume values"""
-        smoothed_curve = savgol_filter(self.volume_values, window_length = 5, polyorder = 2)
-        self.volume_values = smoothed_curve
+        if case == "vol":
+            smoothed_curve = savgol_filter(self.volume_values, window_length = 5, polyorder = 2)
+            self.volume_values = smoothed_curve
+        elif case == "dvoldt":
+            smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 5, polyorder = 2)
+            self.d_vol_dt = smoothed_curve
+        else:
+            print(f"Wrong case for filter.")
+            return False
 
     def compute_vol_derivations(self):
         """Compute derivation"""
         self.d_vol_dt = []
         for i in range(len(self.volume_values)):
-            if i == 0: 
-                print(f"self.volume_values[i]: {self.volume_values[i]}")
-                print(f"self.volume_values[-1]: {self.volume_values[-1]}")
-                self.d_vol_dt.append((self.volume_values[i] - self.volume_values[-1]) / self.timestep_size)
+            if i == 0: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[-1]) / self.timestep_size)
             else: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
-
-
 
     def plot_data(self):
         """Plot time and volume"""
@@ -152,10 +160,10 @@ class CSVLoaderApp:
             
             ## Plot derivation
             self.axis2.clear() # Clear previous plot
-            self.axis2.plot(self.time_values, self.d_vol_dt, label='Second Volume vs Time')
+            self.axis2.plot(self.time_values, self.d_vol_dt, label='Volume derivation vs Time')
             # Set plot labels and legend
             self.axis2.set_xlabel('Time (ms)')
-            self.axis2.set_ylabel('Second Volume (ml)')
+            self.axis2.set_ylabel('Volume change (ml/s)')
             self.axis2.legend()
             self.canvas2.draw() # Update canvas for the second plot
 

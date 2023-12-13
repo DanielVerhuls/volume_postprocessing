@@ -13,14 +13,15 @@ class CSVLoaderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Volume post-processing")
-
+        # Cycle data
         self.data = None  # 2D array to store CSV data
         self.t_rr = 0
         self.t_clip = 0
+        self.timestep_size = 1 # 1 ms
+        # Plots
         self.time_values = []
         self.volume_values = []
         self.d_vol_dt = []
-        self.timestep_size = 1 # 1 ms
         # Export values
         self.EDV = 0
         self.ESV = 0
@@ -28,32 +29,40 @@ class CSVLoaderApp:
         self.PFR = 0
         self.time_to_PER = 0
         self.time_to_PFR = 0
-        self.perc_time_to_PER = 0 # percantage time to PER depending on t_rr
-        self.perc_time_to_PFR = 0 # percantage time to PFR depending on t_rr
+        # Normalized plots and values
+        self.norm_time_values = []
+        self.norm_volume_values = []
+        self.norm_d_vol_dt = []
+        self.norm_EDV = 1
+        self.norm_ESV = 0
+        self.norm_PER = 0
+        self.norm_PFR = 1
+        self.norm_time_to_PER = 0 # percantage time to PER depending on t_rr
+        self.norm_time_to_PFR = 0 # percantage time to PFR depending on t_rr
 
-        # Create UI components
+        # Create UI buttons
         self.btn_load = tk.Button(root, text="Load CSV", command=self.load_csv)
         self.btn_load.pack(pady=5)
         self.btn_load = tk.Button(root, text="Export data", command=self.export_data)
-        self.btn_load.pack(pady=10)
-
+        self.btn_load.pack()
+        # Create a Checkbox
+        self.checkbox_var = tk.BooleanVar()
+        self.checkbox = tk.Checkbutton(root, text="Normalize Plots", variable=self.checkbox_var)
+        self.checkbox.pack()
+        # Create labels for results
+        self.EDV_label = tk.Label(root, text="")
+        self.EDV_label.pack()
         # Create a matplotlib figure and axis for the volume plot
         self.figure1, self.axis1 = plt.subplots(figsize=(7, 5), dpi=100)
         self.canvas1 = FigureCanvasTkAgg(self.figure1, master=root)
         self.canvas_widget1 = self.canvas1.get_tk_widget()
         self.canvas_widget1.pack(side=tk.TOP)
-        
-        # Create a matplotlib figure and axis for the second plot 
+        # Create a matplotlib figure and axis for the volume derivation plot 
         self.figure2, self.axis2 = plt.subplots(figsize=(7, 5), dpi=100)
         self.canvas2 = FigureCanvasTkAgg(self.figure2, master=root)
         self.canvas_widget2 = self.canvas2.get_tk_widget()
         self.canvas_widget2.pack(side=tk.BOTTOM)
-
-        # Create labels for results
-        self.EDV_label = tk.Label(root, text="")
-        self.EDV_label.pack(side=tk.LEFT)
-
-
+        
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -86,38 +95,45 @@ class CSVLoaderApp:
                 elif row_index == 749:
                     for val in row[1:]: 
                         if val: self.volume_values.append(float(val)) 
-        # Increase temporal resolution through interpolation
+        ## Increase temporal resolution through interpolation
         self.interpolate_values(target_time_step=1) 
-        # Close the gap of the recorded data (e.g. if only a part of t_rr has been captured)
+        ## Close the gap of the recorded data (e.g. if only a part of t_rr has been captured)
         if self.t_clip != self.t_rr: self.close_volume_values()
-        # Shift the volumes such that the EDV is at the begining
+        ## Shift the volumes such that the EDV is at the begining
         self.volume_shift()
-        # Apply smoothing filter to volumes
+        ## Apply smoothing filter to volumes
         self.savitzky_golay_filter(case="vol")
-        # Compute volume derivations
+        ## Compute volume derivations
         self.compute_vol_derivations()
-        
-
+        ## Apply adaptive smoothing to volume derivations
         # Create a mask to specify different regions
-        mask = np.zeros((3, len(self.volume_values)))  # Two regions
+        mask = np.zeros((3, len(self.volume_values)))  # Five regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
         mask[0, 0:150] = 1  # Apply filter to the first region
         mask[1, 150:500] = 1    # Apply filter to the second region
         mask[1, 500:] = 1    # Apply filter to the third region
-
         # Define window sizes and orders for each region
-        window_sizes = [3, 31, 3]
-        orders = [2, 4, 2]
-
+        window_sizes = [15, 51, 15]
+        orders = [5, 5, 5]
+        print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
+        print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
+        print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
         self.d_vol_dt = self.apply_variable_strength_savitzky_golay(self.d_vol_dt, window_sizes, orders, mask)
         print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
         print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
         print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
-        #self.savitzky_golay_filter(case="d_vol_dt")
+        self.savitzky_golay_filter(case="d_vol_dt")
         print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
         print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
         print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
-        self.compute_exports()
+        ## Compute exports
+        self.compute_min_max()
+        ## Normalize values
+        self.normalize_values()
+
         
+
+        self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.norm_time_to_PER, self.norm_time_to_PFR), justify='left')
+    
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
         # Check if the lengths of time_data and volume_data are the same
@@ -167,7 +183,7 @@ class CSVLoaderApp:
             smoothed_curve = savgol_filter(self.volume_values, window_length = 5, polyorder = 4)
             self.volume_values = smoothed_curve
         elif case == "d_vol_dt":
-            smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 10, polyorder = 4)
+            smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 15, polyorder = 5)
             self.d_vol_dt = smoothed_curve
         else:
             print(f"Wrong case for filter.")
@@ -209,7 +225,7 @@ class CSVLoaderApp:
             if i == 0: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[-1]) / self.timestep_size)
             else: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
 
-    def compute_exports(self):
+    def compute_min_max(self):
         """Compute exports"""
         # Find volume maxima and minima
         self.EDV = max(self.volume_values)
@@ -220,44 +236,74 @@ class CSVLoaderApp:
         # Compute times to peaks
         self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
         self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))
-        # Norm values with t_rr
-        self.perc_time_to_PER = self.time_to_PER / self.t_rr * 100 
-        self.perc_time_to_PFR = self.time_to_PFR / self.t_rr * 100
-        self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.perc_time_to_PER, self.perc_time_to_PFR), justify='left')
-  
+
+    def normalize_values(self):
+        """Normalize values for times and volumes"""
+        # Plots
+        self.norm_time_values = []
+        for time_val in self.time_values: self.norm_time_values.append(time_val / self.t_rr)
+        self.norm_volume_values = self.volume_values / self.EDV
+        self.norm_d_vol_dt = self.d_vol_dt / (max(abs(self.PFR), abs(self.PER)))
+        # Maxima and minima
+        self.norm_ESV = self.ESV / self.EDV
+        self.norm_PER = self.PER / (max(abs(self.PFR), abs(self.PER)))
+        self.norm_PFR = self.PFR / (max(abs(self.PFR), abs(self.PER)))
+        # Times to PER/PFR
+        self.norm_time_to_PER = self.time_to_PER / self.t_rr * 100 
+        self.norm_time_to_PFR = self.time_to_PFR / self.t_rr * 100
+        
     def plot_data(self):
         """Plot time and volume"""
         if self.data:
-            ## Plot time and volume
-            self.axis1.clear() # Clear previous plot
-            self.axis1.plot(self.time_values, self.volume_values, label='Volume vs Time')
-            # Set plot labels and legend
-            self.axis1.set_xlabel('Time (ms)')
-            self.axis1.set_ylabel('Volume (ml)')
-            self.axis1.legend()
-            self.canvas1.draw() # Update canvas
-            
-            ## Plot derivation
-            self.axis2.clear() # Clear previous plot
-            self.axis2.plot(self.time_values, self.d_vol_dt, label='Volume derivation vs Time')
-            # Mark maximum and minimum values with points
-            self.axis2.scatter(self.time_to_PFR, self.PFR, color='red', label='PFR', marker='x')
-            self.axis2.scatter(self.time_to_PER, self.PER, color='blue', label='PER', marker='x')
-
-            # Set plot labels and legend
-            self.axis2.set_xlabel('Time (ms)')
-            self.axis2.set_ylabel('Volume change (l/s)')
-            self.axis2.legend()
-            self.canvas2.draw() # Update canvas for the second plot
+            if not self.checkbox_var.get(): # Plot normalized values or not
+                ## Plot time and volume
+                self.axis1.clear() # Clear previous plot
+                self.axis1.plot(self.time_values, self.volume_values, label='Volume')
+                # Set plot labels and legend
+                self.axis1.set_xlabel('Time (ms)')
+                self.axis1.set_ylabel('Volume (ml)')
+                self.axis1.legend()
+                self.canvas1.draw() # Update canvas
+                ## Plot derivation
+                self.axis2.clear() # Clear previous plot
+                self.axis2.plot(self.time_values, self.d_vol_dt, label='Volume derivation')
+                # Mark maximum and minimum values with points
+                self.axis2.scatter(self.time_to_PFR, self.PFR, color='red', label='PFR', marker='x')
+                self.axis2.scatter(self.time_to_PER, self.PER, color='blue', label='PER', marker='x')
+                # Set plot labels and legend
+                self.axis2.set_xlabel('Time (ms)')
+                self.axis2.set_ylabel('Volume change (l/s)')
+                self.axis2.legend()
+                self.canvas2.draw() # Update canvas for the second plot
+            else:
+                ## Plot time and volume
+                self.axis1.clear() # Clear previous plot
+                self.axis1.plot(self.norm_time_values, self.norm_volume_values, label='Volume')
+                # Set plot labels and legend
+                self.axis1.set_xlabel('Normalized time (-)')
+                self.axis1.set_ylabel('Normalized volume (-)')
+                self.axis1.legend()
+                self.canvas1.draw() # Update canvas
+                ## Plot derivation
+                self.axis2.clear() # Clear previous plot
+                self.axis2.plot(self.norm_time_values, self.norm_d_vol_dt, label='Volume derivation')
+                # Mark maximum and minimum values with points
+                self.axis2.scatter(self.norm_time_to_PFR / 100, self.norm_PFR, color='red', label='PFR', marker='x')
+                self.axis2.scatter(self.norm_time_to_PER / 100, self.norm_PER, color='blue', label='PER', marker='x')
+                # Set plot labels and legend
+                self.axis2.set_xlabel('Normalized time (-)')
+                self.axis2.set_ylabel('Normalized volume change (-)')
+                self.axis2.legend()
+                self.canvas2.draw() # Update canvas for the second plot
 
     def export_data(self):
-        """!!!"""
+        """Export computed data into csv file"""
         if not self.data:
             print(f"No data loaded")
             return False    
-        
+        # Open UI dialog for filepath
         file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
-        with open(file_path, 'w', newline='') as csv_file:
+        with open(file_path, 'w', newline='') as csv_file: # Exports
             csv_writer = csv.writer(csv_file, delimiter=';')
             csv_writer.writerow(self.localize_floats(["Variable", "Value", "Unit", "Normalized value"]))
             csv_writer.writerow(self.localize_floats(["EDV", self.EDV, "ml"]))
@@ -271,12 +317,11 @@ class CSVLoaderApp:
             csv_writer.writerow(self.localize_floats(["Volumes"] + self.volume_values.tolist()))
             csv_writer.writerow(self.localize_floats(["d_vol_dt"] +  self.d_vol_dt.tolist()))
 
-
     def localize_floats(self, row):
         """Exchange the english notation of decimal numbers ('.') with the german (',')"""
         return [str(el).replace('.', ',') if isinstance(el, float) else el for el in row]
 
-# Create the main application windowy
+# Create the main application window
 root = tk.Tk()
 app = CSVLoaderApp(root)
 

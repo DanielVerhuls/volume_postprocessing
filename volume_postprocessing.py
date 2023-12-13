@@ -34,16 +34,22 @@ class CSVLoaderApp:
         self.btn_load.pack(pady=20)
 
         # Create a matplotlib figure and axis for the volume plot
-        self.figure1, self.axis1 = plt.subplots(figsize=(5, 4), dpi=100)
+        self.figure1, self.axis1 = plt.subplots(figsize=(7, 5), dpi=100)
         self.canvas1 = FigureCanvasTkAgg(self.figure1, master=root)
         self.canvas_widget1 = self.canvas1.get_tk_widget()
-        self.canvas_widget1.pack()
-
+        self.canvas_widget1.pack(side=tk.TOP)
+        
         # Create a matplotlib figure and axis for the second plot 
-        self.figure2, self.axis2 = plt.subplots(figsize=(5, 4), dpi=100)
+        self.figure2, self.axis2 = plt.subplots(figsize=(7, 5), dpi=100)
         self.canvas2 = FigureCanvasTkAgg(self.figure2, master=root)
         self.canvas_widget2 = self.canvas2.get_tk_widget()
-        self.canvas_widget2.pack()
+        self.canvas_widget2.pack(side=tk.BOTTOM)
+
+        # Create labels for results
+        self.EDV_label = tk.Label(root, text="")
+        self.EDV_label.pack(side=tk.LEFT)
+
+
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -201,19 +207,14 @@ class CSVLoaderApp:
 
     def compute_exports(self):
         """Compute exports"""
-        print(f"Computing exports")
         self.EDV = max(self.volume_values)
-        print(f"EDV: {self.EDV} ml")
         self.ESV = min(self.volume_values)
-        print(f"ESV: {self.ESV} ml")
         self.PER = min(self.d_vol_dt)
-        print(f"PER: {self.PER} l/s")
         self.PFR = max(self.d_vol_dt)
-        print(f"PFR: {self.PFR} l/s")
         self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
-        print(f"time_to_PER: {self.time_to_PER} ms")
-        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))
-        print(f"time_to_PFR: {self.time_to_PFR} ms")        
+        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))   
+        self.EDV_label.config(text="EDV: {:.4f} ml ESV: {:.4f} ml \nPER: {:.4f} l/s PFR: {:.4f} l/s \nTime to PER: {:.1f} ms  Time to PFR: {:.1f} ms".format(self.EDV, self.ESV, self.PER, self.PFR, self.time_to_PER, self.time_to_PFR), justify='left')
+  
 
     def plot_data(self):
         """Plot time and volume"""
@@ -236,7 +237,7 @@ class CSVLoaderApp:
 
             # Set plot labels and legend
             self.axis2.set_xlabel('Time (ms)')
-            self.axis2.set_ylabel('Volume change (ml/s)')
+            self.axis2.set_ylabel('Volume change (l/s)')
             self.axis2.legend()
             self.canvas2.draw() # Update canvas for the second plot
 

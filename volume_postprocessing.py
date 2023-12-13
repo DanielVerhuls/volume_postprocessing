@@ -28,10 +28,14 @@ class CSVLoaderApp:
         self.PFR = 0
         self.time_to_PER = 0
         self.time_to_PFR = 0
+        self.perc_time_to_PER = 0 # percantage time to PER depending on t_rr
+        self.perc_time_to_PFR = 0 # percantage time to PFR depending on t_rr
 
         # Create UI components
         self.btn_load = tk.Button(root, text="Load CSV", command=self.load_csv)
-        self.btn_load.pack(pady=20)
+        self.btn_load.pack(pady=5)
+        self.btn_load = tk.Button(root, text="Export data", command=self.export_data)
+        self.btn_load.pack(pady=10)
 
         # Create a matplotlib figure and axis for the volume plot
         self.figure1, self.axis1 = plt.subplots(figsize=(7, 5), dpi=100)
@@ -207,15 +211,20 @@ class CSVLoaderApp:
 
     def compute_exports(self):
         """Compute exports"""
+        # Find volume maxima and minima
         self.EDV = max(self.volume_values)
         self.ESV = min(self.volume_values)
+        # Find peak values for derivation
         self.PER = min(self.d_vol_dt)
         self.PFR = max(self.d_vol_dt)
+        # Compute times to peaks
         self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
-        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))   
-        self.EDV_label.config(text="EDV: {:.4f} ml ESV: {:.4f} ml \nPER: {:.4f} l/s PFR: {:.4f} l/s \nTime to PER: {:.1f} ms  Time to PFR: {:.1f} ms".format(self.EDV, self.ESV, self.PER, self.PFR, self.time_to_PER, self.time_to_PFR), justify='left')
+        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))
+        # Norm values with t_rr
+        self.perc_time_to_PER = self.time_to_PER / self.t_rr * 100 
+        self.perc_time_to_PFR = self.time_to_PFR / self.t_rr * 100
+        self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.perc_time_to_PER, self.perc_time_to_PFR), justify='left')
   
-
     def plot_data(self):
         """Plot time and volume"""
         if self.data:
@@ -241,6 +250,32 @@ class CSVLoaderApp:
             self.axis2.legend()
             self.canvas2.draw() # Update canvas for the second plot
 
+    def export_data(self):
+        """!!!"""
+        if not self.data:
+            print(f"No data loaded")
+            return False    
+        
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        with open(file_path, 'w', newline='') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=';')
+            csv_writer.writerow(self.localize_floats(["Variable", "Value", "Unit", "Normalized value"]))
+            csv_writer.writerow(self.localize_floats(["EDV", self.EDV, "ml"]))
+            csv_writer.writerow(self.localize_floats(["ESV", self.ESV, "ml"]))
+            csv_writer.writerow(self.localize_floats(["PER", self.PER, "l/s"]))
+            csv_writer.writerow(self.localize_floats(["PFR", self.PFR, "l/s"]))
+            csv_writer.writerow(self.localize_floats(["Time to PER", self.time_to_PER, "ms"]))
+            csv_writer.writerow(self.localize_floats(["Time to PFR", self.time_to_PFR, "ms"]))
+            csv_writer.writerow(self.localize_floats(["---------------"]))
+            csv_writer.writerow(self.localize_floats(["Time"] +  self.time_values))
+            csv_writer.writerow(self.localize_floats(["Volumes"] + self.volume_values.tolist()))
+            csv_writer.writerow(self.localize_floats(["d_vol_dt"] +  self.d_vol_dt.tolist()))
+            
+            #csv_writer.writerows(self.data)
+
+    def localize_floats(self, row):
+        """Exchange the english notation of decimal numbers ('.') with the german (',')"""
+        return [str(el).replace('.', ',') if isinstance(el, float) else el for el in row]
 
 # Create the main application window
 root = tk.Tk()

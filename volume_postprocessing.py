@@ -63,7 +63,6 @@ class CSVLoaderApp:
         self.canvas_widget2 = self.canvas2.get_tk_widget()
         self.canvas_widget2.pack(side=tk.BOTTOM)
         
-
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if file_path:
@@ -306,16 +305,22 @@ class CSVLoaderApp:
         with open(file_path, 'w', newline='') as csv_file: # Exports
             csv_writer = csv.writer(csv_file, delimiter=';')
             csv_writer.writerow(self.localize_floats(["Variable", "Value", "Unit", "Normalized value"]))
-            csv_writer.writerow(self.localize_floats(["EDV", self.EDV, "ml"]))
-            csv_writer.writerow(self.localize_floats(["ESV", self.ESV, "ml"]))
-            csv_writer.writerow(self.localize_floats(["PER", self.PER, "l/s"]))
-            csv_writer.writerow(self.localize_floats(["PFR", self.PFR, "l/s"]))
-            csv_writer.writerow(self.localize_floats(["Time to PER", self.time_to_PER, "ms"]))
-            csv_writer.writerow(self.localize_floats(["Time to PFR", self.time_to_PFR, "ms"]))
-            csv_writer.writerow(self.localize_floats(["---------------"]))
+            csv_writer.writerow(self.localize_floats(["---------- Values ----------"]))
+            csv_writer.writerow(self.localize_floats(["EDV", self.EDV, "ml", self.norm_EDV]))
+            csv_writer.writerow(self.localize_floats(["ESV", self.ESV, "ml", self.norm_ESV]))
+            csv_writer.writerow(self.localize_floats(["PER", self.PER, "l/s", self.norm_PER]))
+            csv_writer.writerow(self.localize_floats(["PFR", self.PFR, "l/s", self.norm_PFR]))
+            csv_writer.writerow(self.localize_floats(["Time to PER", self.time_to_PER, "ms", self.norm_time_to_PER]))
+            csv_writer.writerow(self.localize_floats(["Time to PFR", self.time_to_PFR, "ms", self.norm_time_to_PFR]))
+            csv_writer.writerow(self.localize_floats(["---------- Plots ----------"]))
             csv_writer.writerow(self.localize_floats(["Time"] +  self.time_values))
             csv_writer.writerow(self.localize_floats(["Volumes"] + self.volume_values.tolist()))
             csv_writer.writerow(self.localize_floats(["d_vol_dt"] +  self.d_vol_dt.tolist()))
+            csv_writer.writerow(self.localize_floats(["---------- Normalized plots ----------"]))
+            csv_writer.writerow(self.localize_floats(["Normalized time"] +  self.norm_time_values))
+            csv_writer.writerow(self.localize_floats(["Normalized volumes"] + self.norm_volume_values.tolist()))
+            csv_writer.writerow(self.localize_floats(["Normalized d_vol_dt"] +  self.norm_d_vol_dt.tolist()))
+
 
     def localize_floats(self, row):
         """Exchange the english notation of decimal numbers ('.') with the german (',')"""

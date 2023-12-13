@@ -270,14 +270,13 @@ class CSVLoaderApp:
             csv_writer.writerow(self.localize_floats(["Time"] +  self.time_values))
             csv_writer.writerow(self.localize_floats(["Volumes"] + self.volume_values.tolist()))
             csv_writer.writerow(self.localize_floats(["d_vol_dt"] +  self.d_vol_dt.tolist()))
-            
-            #csv_writer.writerows(self.data)
+
 
     def localize_floats(self, row):
         """Exchange the english notation of decimal numbers ('.') with the german (',')"""
         return [str(el).replace('.', ',') if isinstance(el, float) else el for el in row]
 
-# Create the main application window
+# Create the main application windowy
 root = tk.Tk()
 app = CSVLoaderApp(root)
 

@@ -76,6 +76,7 @@ class CSVLoaderApp:
                     row_data = [val for val in row]
                     self.data.append(row_data)
         self.get_time_and_vol()
+        self.run_post_processing()
         self.plot_data()
 
     def get_time_and_vol(self):
@@ -94,6 +95,9 @@ class CSVLoaderApp:
                 elif row_index == 749:
                     for val in row[1:]: 
                         if val: self.volume_values.append(float(val)) 
+        
+    def run_post_processing(self):
+        """Pipeline for the postprocessing of volume data"""
         ## Increase temporal resolution through interpolation
         self.interpolate_values(target_time_step=1) 
         ## Close the gap of the recorded data (e.g. if only a part of t_rr has been captured)
@@ -105,23 +109,12 @@ class CSVLoaderApp:
         ## Compute volume derivations
         self.compute_vol_derivations()
         ## Apply adaptive smoothing to volume derivations
-        # Create a mask to specify different regions
-        mask = np.zeros((3, len(self.volume_values)))  # Five regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
-        mask[0, 0:150] = 1  # Create mask for the first region
-        mask[1, 150:500] = 1    # Create mask for the second region
-        mask[1, 500:] = 1    # Create mask for the third region
-        # Define window sizes and orders for each region
-        window_sizes = [15, 51, 15]
-        orders = [5, 5, 5]
-        self.d_vol_dt = self.apply_variable_strength_savitzky_golay(self.d_vol_dt, window_sizes, orders, mask)
-        self.savitzky_golay_filter(case="d_vol_dt")
+        self.derivation_filter()
         ## Compute exports
         self.compute_min_max()
         ## Normalize values
         self.normalize_values()
-
-        
-
+        ## Update UI-label
         self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.norm_time_to_PER, self.norm_time_to_PFR), justify='left')
     
     def close_volume_values(self):
@@ -207,6 +200,19 @@ class CSVLoaderApp:
             smoothed_region = savgol_filter(region_curve, window_size, order)
             smoothed_curve += smoothed_region
         return smoothed_curve
+
+    def derivation_filter(self):
+        """Adaptive smoothing"""
+        # Create a mask to specify different regions
+        mask = np.zeros((3, len(self.volume_values)))  # Five regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
+        mask[0, 0:150] = 1  # Create mask for the first region
+        mask[1, 150:500] = 1    # Create mask for the second region
+        mask[1, 500:] = 1    # Create mask for the third region
+        # Define window sizes and orders for each region
+        window_sizes = [15, 51, 15]
+        orders = [5, 5, 5]
+        self.d_vol_dt = self.apply_variable_strength_savitzky_golay(self.d_vol_dt, window_sizes, orders, mask)
+        self.savitzky_golay_filter(case="d_vol_dt")
 
     def compute_vol_derivations(self):
         """Compute temporal derivation of the volume curve"""
@@ -314,7 +320,6 @@ class CSVLoaderApp:
             csv_writer.writerow(self.localize_floats(["Normalized time"] +  self.norm_time_values))
             csv_writer.writerow(self.localize_floats(["Normalized volumes"] + self.norm_volume_values.tolist()))
             csv_writer.writerow(self.localize_floats(["Normalized d_vol_dt"] +  self.norm_d_vol_dt.tolist()))
-
 
     def localize_floats(self, row):
         """Exchange the english notation of decimal numbers ('.') with the german (',')"""

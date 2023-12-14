@@ -47,7 +47,7 @@ class CSVLoaderApp:
         self.btn_load.pack()
         # Create a Checkbox
         self.checkbox_var = tk.BooleanVar()
-        self.checkbox = tk.Checkbutton(root, text="Normalize Plots", variable=self.checkbox_var)
+        self.checkbox = tk.Checkbutton(root, text="Normalize Plots", variable=self.checkbox_var, command=self.plot_data)
         self.checkbox.pack()
         # Create labels for results
         self.EDV_label = tk.Label(root, text="")
@@ -107,23 +107,14 @@ class CSVLoaderApp:
         ## Apply adaptive smoothing to volume derivations
         # Create a mask to specify different regions
         mask = np.zeros((3, len(self.volume_values)))  # Five regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
-        mask[0, 0:150] = 1  # Apply filter to the first region
-        mask[1, 150:500] = 1    # Apply filter to the second region
-        mask[1, 500:] = 1    # Apply filter to the third region
+        mask[0, 0:150] = 1  # Create mask for the first region
+        mask[1, 150:500] = 1    # Create mask for the second region
+        mask[1, 500:] = 1    # Create mask for the third region
         # Define window sizes and orders for each region
         window_sizes = [15, 51, 15]
         orders = [5, 5, 5]
-        print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
-        print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
-        print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
         self.d_vol_dt = self.apply_variable_strength_savitzky_golay(self.d_vol_dt, window_sizes, orders, mask)
-        print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
-        print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
-        print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
         self.savitzky_golay_filter(case="d_vol_dt")
-        print(f"Derivative volume value at index 300: {self.d_vol_dt[300]}")
-        print(f"Derivative minimum volume: {min(self.d_vol_dt)}")
-        print(f"Derivative maximum volume: {max(self.d_vol_dt)}")
         ## Compute exports
         self.compute_min_max()
         ## Normalize values
@@ -242,11 +233,11 @@ class CSVLoaderApp:
         self.norm_time_values = []
         for time_val in self.time_values: self.norm_time_values.append(time_val / self.t_rr)
         self.norm_volume_values = self.volume_values / self.EDV
-        self.norm_d_vol_dt = self.d_vol_dt / (max(abs(self.PFR), abs(self.PER)))
+        self.norm_d_vol_dt = self.d_vol_dt / self.EDV
         # Maxima and minima
         self.norm_ESV = self.ESV / self.EDV
-        self.norm_PER = self.PER / (max(abs(self.PFR), abs(self.PER)))
-        self.norm_PFR = self.PFR / (max(abs(self.PFR), abs(self.PER)))
+        self.norm_PER = self.PER / self.EDV
+        self.norm_PFR = self.PFR / self.EDV
         # Times to PER/PFR
         self.norm_time_to_PER = self.time_to_PER / self.t_rr * 100 
         self.norm_time_to_PFR = self.time_to_PFR / self.t_rr * 100
@@ -294,6 +285,9 @@ class CSVLoaderApp:
                 self.axis2.set_ylabel('Normalized volume change (-)')
                 self.axis2.legend()
                 self.canvas2.draw() # Update canvas for the second plot
+        else:
+            print(f"No csv file loaded yet")
+            return False
 
     def export_data(self):
         """Export computed data into csv file"""

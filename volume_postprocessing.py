@@ -39,7 +39,6 @@ class CSVLoaderApp:
         self.norm_PFR = 1
         self.norm_time_to_PER = 0 # percantage time to PER depending on t_rr
         self.norm_time_to_PFR = 0 # percantage time to PFR depending on t_rr
-
         # Create UI buttons
         self.btn_load = tk.Button(root, text="Load CSV", command=self.load_csv)
         self.btn_load.pack(pady=5)
@@ -98,25 +97,40 @@ class CSVLoaderApp:
         
     def run_post_processing(self):
         """Pipeline for the postprocessing of volume data"""
+        self.print_type()
         ## Increase temporal resolution through interpolation
         self.interpolate_values(target_time_step=1) 
+        self.print_type()
         ## Close the gap of the recorded data (e.g. if only a part of t_rr has been captured)
         if self.t_clip != self.t_rr: self.close_volume_values()
+        self.print_type()
         ## Shift the volumes such that the EDV is at the begining
         self.volume_shift()
+        self.print_type()
         ## Apply smoothing filter to volumes
         self.savitzky_golay_filter(case="vol")
+        self.print_type()
         ## Compute volume derivations
         self.compute_vol_derivations()
+        self.print_type()
         ## Apply adaptive smoothing to volume derivations
-        self.derivation_filter()
+        self.derivation_smoothing_filter()
+        self.print_type()
         ## Compute exports
         self.compute_min_max()
+        self.print_type()
         ## Normalize values
         self.normalize_values()
+        self.print_type()
         ## Update UI-label
         self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.norm_time_to_PER, self.norm_time_to_PFR), justify='left')
     
+    def print_type(self):
+        """!!!"""
+        print(f"Type of times: {type(self.time_values)}")
+        print(f"Type of volumes: {type(self.volume_values)}")
+        print(f"Type of d_vol_dt: {type(self.d_vol_dt)}")
+
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
         # Check if the lengths of time_data and volume_data are the same
@@ -164,10 +178,10 @@ class CSVLoaderApp:
         """Apply Savitzky-Golay filter to smooth volume values"""
         if case == "vol":
             smoothed_curve = savgol_filter(self.volume_values, window_length = 5, polyorder = 4)
-            self.volume_values = smoothed_curve
+            self.volume_values = smoothed_curve.tolist()
         elif case == "d_vol_dt":
             smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 15, polyorder = 5)
-            self.d_vol_dt = smoothed_curve
+            self.d_vol_dt = smoothed_curve.tolist()
         else:
             print(f"Wrong case for filter.")
             return False
@@ -199,15 +213,23 @@ class CSVLoaderApp:
             # Apply savgol filter to specified region
             smoothed_region = savgol_filter(region_curve, window_size, order)
             smoothed_curve += smoothed_region
-        return smoothed_curve
+        return smoothed_curve.tolist()
 
-    def derivation_filter(self):
+    def derivation_smoothing_filter(self):
         """Adaptive smoothing"""
         # Create a mask to specify different regions
-        mask = np.zeros((3, len(self.volume_values)))  # Five regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
-        mask[0, 0:150] = 1  # Create mask for the first region
-        mask[1, 150:500] = 1    # Create mask for the second region
-        mask[1, 500:] = 1    # Create mask for the third region
+        self.compute_min_max()
+        n_timesteps = len(self.volume_values)
+        n_interlude_one = math.floor(self.time_to_PER + n_timesteps / 10)
+        n_interlude_two = math.floor(self.time_to_PFR - n_timesteps / 10)
+        print(f"Number timesteps:: {n_timesteps}")
+        print(f"Interlude 1: {n_interlude_one}")
+        print(f"Interlude 2: {n_interlude_two}")
+
+        mask = np.zeros((3, len(self.volume_values)))  # Three regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
+        mask[0, 0:n_interlude_one] = 1  # Create mask for the first region
+        mask[1, n_interlude_one:n_interlude_two] = 1    # Create mask for the second region
+        mask[1, n_interlude_two:] = 1    # Create mask for the third region
         # Define window sizes and orders for each region
         window_sizes = [15, 51, 15]
         orders = [5, 5, 5]
@@ -230,16 +252,18 @@ class CSVLoaderApp:
         self.PER = min(self.d_vol_dt)
         self.PFR = max(self.d_vol_dt)
         # Compute times to peaks
-        self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
-        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))
+        self.time_to_PER = self.d_vol_dt.index(min(self.d_vol_dt))
+        self.time_to_PFR = self.d_vol_dt.index(max(self.d_vol_dt))
 
     def normalize_values(self):
         """Normalize values for times and volumes"""
         # Plots
         self.norm_time_values = []
         for time_val in self.time_values: self.norm_time_values.append(time_val / self.t_rr)
-        self.norm_volume_values = self.volume_values / self.EDV
-        self.norm_d_vol_dt = self.d_vol_dt / self.EDV
+        self.norm_volume_values = []
+        for vol_val in self.volume_values: self.norm_volume_values.append(vol_val / self.EDV)
+        self.norm_d_vol_dt = []
+        for d_v_val in self.d_vol_dt: self.norm_d_vol_dt.append(d_v_val / self.EDV)
         # Maxima and minima
         self.norm_ESV = self.ESV / self.EDV
         self.norm_PER = self.PER / self.EDV

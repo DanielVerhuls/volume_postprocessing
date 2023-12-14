@@ -8,6 +8,7 @@ import math
 import numpy as np
 from scipy.signal import savgol_filter
 from scipy.interpolate import CubicSpline
+import sys
 
 class CSVLoaderApp:
     def __init__(self, root):
@@ -61,6 +62,9 @@ class CSVLoaderApp:
         self.canvas2 = FigureCanvasTkAgg(self.figure2, master=root)
         self.canvas_widget2 = self.canvas2.get_tk_widget()
         self.canvas_widget2.pack(side=tk.BOTTOM)
+        # Bind the closing event to the terminate_program method
+        self.root.protocol("WM_DELETE_WINDOW", self.terminate_program)
+
         
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -97,44 +101,25 @@ class CSVLoaderApp:
         
     def run_post_processing(self):
         """Pipeline for the postprocessing of volume data"""
-        self.print_type(1)
         ## Increase temporal resolution through interpolation
         self.interpolate_values(target_time_step=1) 
-        self.print_type(2)
         ## Close the gap of the recorded data (e.g. if only a part of t_rr has been captured)
         if self.t_clip != self.t_rr: self.close_volume_values()
-        self.print_type(3)
         ## Shift the volumes such that the EDV is at the begining
         self.volume_shift()
-        self.print_type(4)
         ## Apply smoothing filter to volumes
         self.savitzky_golay_filter(case="vol")
-        self.print_type(5)
         ## Compute volume derivations
         self.compute_vol_derivations()
-        self.print_type(6)
         ## Apply adaptive smoothing to volume derivations
         self.derivation_smoothing_filter()
-        self.print_type(7)
         ## Compute exports
         self.compute_min_max()
-        self.print_type(8)
         ## Normalize values
         self.normalize_values()
-        self.print_type(9)
         ## Update UI-label
         self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.norm_time_to_PER, self.norm_time_to_PFR), justify='left')
     
-    def print_type(self, value):
-        """!!!"""
-        print(f"Operation number: {value}")
-        print(f"Type of times: {type(self.time_values)} with length: {len(self.time_values)}")
-        print(f"Type of volumes: {type(self.volume_values)}with length: {len(self.volume_values)}")
-        print(f"Type of d_vol_dt: {type(self.d_vol_dt)}with length: {len(self.d_vol_dt)}")
-        print(f"Type of normed times: {type(self.norm_time_values)}with length: {len(self.norm_time_values)}")
-        print(f"Type of normed volumes: {type(self.norm_volume_values)}with length: {len(self.norm_volume_values)}")
-        print(f"Type of normed d_vol_dt: {type(self.norm_d_vol_dt)}with length: {len(self.norm_d_vol_dt)}")
-
     def interpolate_values(self, target_time_step):
         """Interpolate volume-time curve to a specified time step"""
         # Create a new time array with the desired time step
@@ -281,7 +266,6 @@ class CSVLoaderApp:
         
     def plot_data(self):
         """Plot time and volume"""
-        self.print_type(10)
         if self.data:
             if not self.checkbox_var.get(): # Plot normalized values or not
                 ## Plot time and volume
@@ -326,7 +310,6 @@ class CSVLoaderApp:
         else:
             print(f"No csv file loaded yet")
             return False
-        self.print_type(11)
 
     def export_data(self):
         """Export computed data into csv file"""
@@ -357,6 +340,12 @@ class CSVLoaderApp:
     def localize_floats(self, row):
         """Exchange the english notation of decimal numbers ('.') with the german (',')"""
         return [str(el).replace('.', ',') if isinstance(el, float) else el for el in row]
+
+    def terminate_program(self):
+        # Function to terminate the program when the main window is closed
+        print("Program terminated")
+        self.root.destroy()
+        sys.exit()
 
 # Create the main application window
 root = tk.Tk()

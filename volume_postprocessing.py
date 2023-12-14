@@ -19,9 +19,9 @@ class CSVLoaderApp:
         self.t_clip = 0
         self.timestep_size = 1 # 1 ms
         # Plots
-        self.time_values = []
-        self.volume_values = []
-        self.d_vol_dt = []
+        self.time_values = np.empty(0, dtype=float)
+        self.volume_values = np.empty(0, dtype=float)
+        self.d_vol_dt = np.empty(0, dtype=float)
         # Export values
         self.EDV = 0
         self.ESV = 0
@@ -30,9 +30,9 @@ class CSVLoaderApp:
         self.time_to_PER = 0
         self.time_to_PFR = 0
         # Normalized plots and values
-        self.norm_time_values = []
-        self.norm_volume_values = []
-        self.norm_d_vol_dt = []
+        self.norm_time_values = np.empty(0, dtype=float)
+        self.norm_volume_values = np.empty(0, dtype=float)
+        self.norm_d_vol_dt = np.empty(0, dtype=float)
         self.norm_EDV = 1
         self.norm_ESV = 0
         self.norm_PER = 0
@@ -88,48 +88,63 @@ class CSVLoaderApp:
                 if row_index == 13: self.t_rr = float(row[1])
                 elif row_index == 748 : 
                     for val in row[1:]:
-                        if val: self.time_values.append(float(val))
+                        if val: self.time_values = np.append(self.time_values, float(val))
                     self.timestep_size = self.time_values[1] - self.time_values[0]
                     self.t_clip = max(self.time_values)
                 elif row_index == 749:
                     for val in row[1:]: 
-                        if val: self.volume_values.append(float(val)) 
+                        if val: self.volume_values = np.append(self.volume_values, float(val))
         
     def run_post_processing(self):
         """Pipeline for the postprocessing of volume data"""
-        self.print_type()
+        self.print_type(1)
         ## Increase temporal resolution through interpolation
         self.interpolate_values(target_time_step=1) 
-        self.print_type()
+        self.print_type(2)
         ## Close the gap of the recorded data (e.g. if only a part of t_rr has been captured)
         if self.t_clip != self.t_rr: self.close_volume_values()
-        self.print_type()
+        self.print_type(3)
         ## Shift the volumes such that the EDV is at the begining
         self.volume_shift()
-        self.print_type()
+        self.print_type(4)
         ## Apply smoothing filter to volumes
         self.savitzky_golay_filter(case="vol")
-        self.print_type()
+        self.print_type(5)
         ## Compute volume derivations
         self.compute_vol_derivations()
-        self.print_type()
+        self.print_type(6)
         ## Apply adaptive smoothing to volume derivations
         self.derivation_smoothing_filter()
-        self.print_type()
+        self.print_type(7)
         ## Compute exports
         self.compute_min_max()
-        self.print_type()
+        self.print_type(8)
         ## Normalize values
         self.normalize_values()
-        self.print_type()
+        self.print_type(9)
         ## Update UI-label
         self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.norm_time_to_PER, self.norm_time_to_PFR), justify='left')
     
-    def print_type(self):
+    def print_type(self, value):
         """!!!"""
-        print(f"Type of times: {type(self.time_values)}")
-        print(f"Type of volumes: {type(self.volume_values)}")
-        print(f"Type of d_vol_dt: {type(self.d_vol_dt)}")
+        print(f"Operation number: {value}")
+        print(f"Type of times: {type(self.time_values)} with length: {len(self.time_values)}")
+        print(f"Type of volumes: {type(self.volume_values)}with length: {len(self.volume_values)}")
+        print(f"Type of d_vol_dt: {type(self.d_vol_dt)}with length: {len(self.d_vol_dt)}")
+        print(f"Type of normed times: {type(self.norm_time_values)}with length: {len(self.norm_time_values)}")
+        print(f"Type of normed volumes: {type(self.norm_volume_values)}with length: {len(self.norm_volume_values)}")
+        print(f"Type of normed d_vol_dt: {type(self.norm_d_vol_dt)}with length: {len(self.norm_d_vol_dt)}")
+
+    def interpolate_values(self, target_time_step):
+        """Interpolate volume-time curve to a specified time step"""
+        # Create a new time array with the desired time step
+        interpolated_time = np.arange(self.time_values[0], round(self.time_values[-1]), target_time_step)
+        # Interpolate volume values based on the new time array
+        interpolated_volume = np.interp(interpolated_time, self.time_values.tolist(), self.volume_values.tolist())
+        self.time_values = interpolated_time
+        self.volume_values = interpolated_volume
+        self.timestep_size = target_time_step
+        self.t_clip = max(self.time_values)
 
     def close_volume_values(self):
         """Linearly interpolate between the last and first volume value if not the whole rr-duration is captured"""
@@ -146,42 +161,35 @@ class CSVLoaderApp:
         volumes = np.append(volumes, volumes[0])
         # Compute new time values after spline interpolation
         plot_time_values = np.linspace(min(times), max(times), num=round(self.t_rr)) 
-        self.time_values = plot_time_values.tolist()
+        self.time_values = plot_time_values
         # Compute spline of the volumes values
         spline = CubicSpline(times, volumes, bc_type='periodic')
         spline_values = spline(plot_time_values)
-        self.volume_values = spline_values.tolist()
+        self.volume_values = spline_values
         
     def volume_shift(self, ):
         """Shift volumes such that the initial value begins with EDV"""
-        if not self.volume_values:
+        if not self.volume_values.any():
             # Return an empty list if the input list is empty
             return []
         # Find the index of the maximum value in the list
-        max_index = self.volume_values.index(max(self.volume_values))
+        max_index = self.volume_values.tolist().index(max(self.volume_values))
         # Rotate the list to move the maximum value to the beginning
-        temp = self.volume_values[max_index:] + self.volume_values[:max_index]
+        print(f"self.volume_values[max_index:]: {self.volume_values[max_index:]}")
+        print(f"self.volume_values[:max_index]: {self.volume_values[:max_index]}")
+        temp = np.concatenate([self.volume_values[max_index:], self.volume_values[:max_index]])
+        
+        #self.volume_values[max_index:] + self.volume_values[:max_index]
         self.volume_values = temp
-
-    def interpolate_values(self, target_time_step):
-        """Interpolate volume-time curve to a specified time step"""
-        # Create a new time array with the desired time step
-        interpolated_time = np.arange(self.time_values[0], round(self.time_values[-1]), target_time_step)
-        # Interpolate volume values based on the new time array
-        interpolated_volume = np.interp(interpolated_time, self.time_values, self.volume_values)
-        self.time_values = interpolated_time.tolist()
-        self.volume_values = interpolated_volume.tolist()
-        self.timestep_size = target_time_step
-        self.t_clip = max(self.time_values)
 
     def savitzky_golay_filter(self, case):
         """Apply Savitzky-Golay filter to smooth volume values"""
         if case == "vol":
             smoothed_curve = savgol_filter(self.volume_values, window_length = 5, polyorder = 4)
-            self.volume_values = smoothed_curve.tolist()
+            self.volume_values = smoothed_curve
         elif case == "d_vol_dt":
             smoothed_curve = savgol_filter(self.d_vol_dt, window_length = 15, polyorder = 5)
-            self.d_vol_dt = smoothed_curve.tolist()
+            self.d_vol_dt = smoothed_curve
         else:
             print(f"Wrong case for filter.")
             return False
@@ -222,10 +230,6 @@ class CSVLoaderApp:
         n_timesteps = len(self.volume_values)
         n_interlude_one = math.floor(self.time_to_PER + n_timesteps / 10)
         n_interlude_two = math.floor(self.time_to_PFR - n_timesteps / 10)
-        print(f"Number timesteps:: {n_timesteps}")
-        print(f"Interlude 1: {n_interlude_one}")
-        print(f"Interlude 2: {n_interlude_two}")
-
         mask = np.zeros((3, len(self.volume_values)))  # Three regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
         mask[0, 0:n_interlude_one] = 1  # Create mask for the first region
         mask[1, n_interlude_one:n_interlude_two] = 1    # Create mask for the second region
@@ -238,10 +242,11 @@ class CSVLoaderApp:
 
     def compute_vol_derivations(self):
         """Compute temporal derivation of the volume curve"""
-        self.d_vol_dt = [] 
+        self.d_vol_dt = np.empty(0, dtype=float)
         for i in range(len(self.volume_values)):
-            if i == 0: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[-1]) / self.timestep_size)
-            else: self.d_vol_dt.append((self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
+            if i == 0: self.d_vol_dt = np.append(self.d_vol_dt, (self.volume_values[i] - self.volume_values[-1]) / self.timestep_size) # Loop around first and last value
+            else: self.d_vol_dt = np.append(self.d_vol_dt, (self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
+                
 
     def compute_min_max(self):
         """Compute exports"""
@@ -252,18 +257,20 @@ class CSVLoaderApp:
         self.PER = min(self.d_vol_dt)
         self.PFR = max(self.d_vol_dt)
         # Compute times to peaks
-        self.time_to_PER = self.d_vol_dt.index(min(self.d_vol_dt))
-        self.time_to_PFR = self.d_vol_dt.index(max(self.d_vol_dt))
+        self.time_to_PER = self.d_vol_dt.tolist().index(min(self.d_vol_dt))
+        self.time_to_PFR = self.d_vol_dt.tolist().index(max(self.d_vol_dt))
 
     def normalize_values(self):
         """Normalize values for times and volumes"""
         # Plots
-        self.norm_time_values = []
-        for time_val in self.time_values: self.norm_time_values.append(time_val / self.t_rr)
-        self.norm_volume_values = []
-        for vol_val in self.volume_values: self.norm_volume_values.append(vol_val / self.EDV)
-        self.norm_d_vol_dt = []
-        for d_v_val in self.d_vol_dt: self.norm_d_vol_dt.append(d_v_val / self.EDV)
+        # Delete old values
+        self.norm_time_values = np.empty(0, dtype=float)
+        self.norm_time_values = np.empty(0, dtype=float)
+        self.norm_time_values = np.empty(0, dtype=float)
+        # Fill aray with normalized values
+        for time_val in self.time_values: self.norm_time_values = np.append(self.norm_time_values, time_val / self.t_rr)
+        for vol_val in self.volume_values: self.norm_volume_values = np.append(self.norm_volume_values, vol_val / self.EDV)
+        for d_v_val in self.d_vol_dt: self.norm_d_vol_dt = np.append(self.norm_d_vol_dt, d_v_val / self.EDV)
         # Maxima and minima
         self.norm_ESV = self.ESV / self.EDV
         self.norm_PER = self.PER / self.EDV

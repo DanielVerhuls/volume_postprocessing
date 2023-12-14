@@ -230,7 +230,7 @@ class CSVLoaderApp:
         n_timesteps = len(self.volume_values)
         n_interlude_one = math.floor(self.time_to_PER + n_timesteps / 10)
         n_interlude_two = math.floor(self.time_to_PFR - n_timesteps / 10)
-        mask = np.zeros((3, len(self.volume_values)))  # Three regions !!! range um time to PFRabhängig von t_rr/anzahl timesteps
+        mask = np.zeros((3, len(self.volume_values)))  # Three regions 1. Ending just after the minimum and the 2. Starting just before maximum 3. Until the end
         mask[0, 0:n_interlude_one] = 1  # Create mask for the first region
         mask[1, n_interlude_one:n_interlude_two] = 1    # Create mask for the second region
         mask[1, n_interlude_two:] = 1    # Create mask for the third region
@@ -281,6 +281,7 @@ class CSVLoaderApp:
         
     def plot_data(self):
         """Plot time and volume"""
+        self.print_type(10)
         if self.data:
             if not self.checkbox_var.get(): # Plot normalized values or not
                 ## Plot time and volume
@@ -325,6 +326,7 @@ class CSVLoaderApp:
         else:
             print(f"No csv file loaded yet")
             return False
+        self.print_type(11)
 
     def export_data(self):
         """Export computed data into csv file"""
@@ -344,11 +346,11 @@ class CSVLoaderApp:
             csv_writer.writerow(self.localize_floats(["Time to PER", self.time_to_PER, "ms", self.norm_time_to_PER]))
             csv_writer.writerow(self.localize_floats(["Time to PFR", self.time_to_PFR, "ms", self.norm_time_to_PFR]))
             csv_writer.writerow(self.localize_floats(["---------- Plots ----------"]))
-            csv_writer.writerow(self.localize_floats(["Time"] +  self.time_values))
+            csv_writer.writerow(self.localize_floats(["Time"] +  self.time_values.tolist()))
             csv_writer.writerow(self.localize_floats(["Volumes"] + self.volume_values.tolist()))
             csv_writer.writerow(self.localize_floats(["d_vol_dt"] +  self.d_vol_dt.tolist()))
             csv_writer.writerow(self.localize_floats(["---------- Normalized plots ----------"]))
-            csv_writer.writerow(self.localize_floats(["Normalized time"] +  self.norm_time_values))
+            csv_writer.writerow(self.localize_floats(["Normalized time"] +  self.norm_time_values.tolist()))
             csv_writer.writerow(self.localize_floats(["Normalized volumes"] + self.norm_volume_values.tolist()))
             csv_writer.writerow(self.localize_floats(["Normalized d_vol_dt"] +  self.norm_d_vol_dt.tolist()))
 

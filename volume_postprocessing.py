@@ -11,6 +11,7 @@ from scipy.interpolate import CubicSpline
 import sys
 
 class CSVLoaderApp:
+    """UI"""
     def __init__(self, root):
         self.root = root
         self.root.title("Volume post-processing")
@@ -65,7 +66,7 @@ class CSVLoaderApp:
         # Bind the closing event to the terminate_program method
         self.root.protocol("WM_DELETE_WINDOW", self.terminate_program)
 
-        
+      
     def load_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if file_path:
@@ -83,7 +84,7 @@ class CSVLoaderApp:
         self.plot_data()
 
     def get_time_and_vol(self):
-        """Read time and volume data"""
+        """Read time and volume data from file"""
         if self.data:
             # Read time and volume data
             self.time_values = []

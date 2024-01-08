@@ -11,12 +11,13 @@ from scipy.interpolate import CubicSpline
 import sys
 
 class CSVLoaderApp:
-    """UI"""
+    """Class for the UI"""
     def __init__(self, root):
+        """Function run whenever an object CSVLoaderApp is created. Sets up UI and public class data."""
         self.root = root
         self.root.title("Volume post-processing")
         # Cycle data
-        self.data = None  # 2D array to store CSV data
+        self.data = None  # 2D array to store CSV data (Dieses array müsste für deinen Fall um eine Dimension erweitert werden denk ich. Generell muessen alle daten pro patient gespeichert werden. Vielleicht bietet sich dafür auch eine neue klasse patient mit den kommenden Variablen an und du erstellst eine Liste mit Patienten)
         self.t_rr = 0
         self.t_clip = 0
         self.timestep_size = 1 # 1 ms
@@ -41,12 +42,15 @@ class CSVLoaderApp:
         self.norm_PFR = 1
         self.norm_time_to_PER = 0 # percantage time to PER depending on t_rr
         self.norm_time_to_PFR = 0 # percantage time to PFR depending on t_rr
+        ## UI
         # Create UI buttons
         self.btn_load = tk.Button(root, text="Load CSV", command=self.load_csv)
         self.btn_load.pack(pady=5)
         self.btn_load = tk.Button(root, text="Export data", command=self.export_data)
         self.btn_load.pack()
-        # Create a Checkbox
+        # Bind the closing event to the terminate_program method
+        self.root.protocol("WM_DELETE_WINDOW", self.terminate_program)
+        # Create a Checkbox (Die nachfolgenden Sachen brauchst du vielleicht bald nicht mehr in der UI)
         self.checkbox_var = tk.BooleanVar()
         self.checkbox = tk.Checkbutton(root, text="Normalize Plots", variable=self.checkbox_var, command=self.plot_data)
         self.checkbox.pack()
@@ -63,11 +67,10 @@ class CSVLoaderApp:
         self.canvas2 = FigureCanvasTkAgg(self.figure2, master=root)
         self.canvas_widget2 = self.canvas2.get_tk_widget()
         self.canvas_widget2.pack(side=tk.BOTTOM)
-        # Bind the closing event to the terminate_program method
-        self.root.protocol("WM_DELETE_WINDOW", self.terminate_program)
+        
 
-      
     def load_csv(self):
+        """Load data from volume file, post-process them and plot them."""
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if file_path:
             # Clear existing data
@@ -84,7 +87,7 @@ class CSVLoaderApp:
         self.plot_data()
 
     def get_time_and_vol(self):
-        """Read time and volume data from file"""
+        """Read time and volume data from file and save them in public variables"""
         if self.data:
             # Read time and volume data
             self.time_values = []
@@ -95,7 +98,7 @@ class CSVLoaderApp:
                     for val in row[1:]:
                         if val: self.time_values = np.append(self.time_values, float(val))
                     self.timestep_size = self.time_values[1] - self.time_values[0]
-                    self.t_clip = max(self.time_values)
+                    self.t_clip = max(self.time_values) # Highest timestep value in data. Necessary for interpolation of missing values.
                 elif row_index == 749:
                     for val in row[1:]: 
                         if val: self.volume_values = np.append(self.volume_values, float(val))
@@ -118,7 +121,7 @@ class CSVLoaderApp:
         self.compute_min_max()
         ## Normalize values
         self.normalize_values()
-        ## Update UI-label
+        ## Update UI-label (Labels koennen raus, wenn du mit mehr patienten arbeitest)
         self.EDV_label.config(text="EDV: {:.4f} ml    ESV: {:.4f} ml \nPER: {:.4f} l/s    PFR: {:.4f} l/s \nTime to PER: {:.4f} (% t_RR)  Time to PFR: {:.4f} % (t_RR)".format(self.EDV, self.ESV, self.PER, self.PFR, self.norm_time_to_PER, self.norm_time_to_PFR), justify='left')
     
     def interpolate_values(self, target_time_step):
@@ -153,19 +156,13 @@ class CSVLoaderApp:
         spline_values = spline(plot_time_values)
         self.volume_values = spline_values
         
-    def volume_shift(self, ):
+    def volume_shift(self):
         """Shift volumes such that the initial value begins with EDV"""
-        if not self.volume_values.any():
-            # Return an empty list if the input list is empty
-            return []
+        if not self.volume_values.any(): return [] # Return an empty list if the input list is empty
         # Find the index of the maximum value in the list
         max_index = self.volume_values.tolist().index(max(self.volume_values))
         # Rotate the list to move the maximum value to the beginning
-        print(f"self.volume_values[max_index:]: {self.volume_values[max_index:]}")
-        print(f"self.volume_values[:max_index]: {self.volume_values[:max_index]}")
         temp = np.concatenate([self.volume_values[max_index:], self.volume_values[:max_index]])
-        
-        #self.volume_values[max_index:] + self.volume_values[:max_index]
         self.volume_values = temp
 
     def savitzky_golay_filter(self, case):
@@ -210,7 +207,7 @@ class CSVLoaderApp:
         return smoothed_curve.tolist()
 
     def derivation_smoothing_filter(self):
-        """Adaptive smoothing"""
+        """Adaptive smoothing (Das war mehr so nach Gefuehl)"""
         # Create a mask to specify different regions
         self.compute_min_max()
         n_timesteps = len(self.volume_values)
@@ -233,7 +230,6 @@ class CSVLoaderApp:
             if i == 0: self.d_vol_dt = np.append(self.d_vol_dt, (self.volume_values[i] - self.volume_values[-1]) / self.timestep_size) # Loop around first and last value
             else: self.d_vol_dt = np.append(self.d_vol_dt, (self.volume_values[i] - self.volume_values[i-1]) / self.timestep_size)
                 
-
     def compute_min_max(self):
         """Compute exports"""
         # Find volume maxima and minima
